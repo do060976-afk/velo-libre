@@ -67,14 +67,46 @@ function App() {
   const [photo,setPhoto] = useState<string|undefined>()
   const [editBike,setEditBike] = useState<Bike|null>(null)
 
-  const refresh = async () => {
-    try {
-      const [b,r,h] = await Promise.all([all<Bike>('bikes'),all<SavedRoute>('routes'),all<Ride>('rides')])
-      if (b.length) setBikes(b)
-      if (r.length) setRoutes(r)
-      if (h.length) setRides(h)
-    } catch { setNotice('Le stockage local n’est pas disponible dans ce navigateur.') }
+
+const refresh = async () => {
+  try {
+    const [storedBikes, r, h] = await Promise.all([
+      all<Bike>('bikes'),
+      all<SavedRoute>('routes'),
+      all<Ride>('rides')
+    ])
+
+    // Conserver les deux vélos initiaux et leurs modifications
+    const mergedBikes = defaultBikes.map(defaultBike =>
+      storedBikes.find(b => b.id === defaultBike.id) ?? defaultBike
+    )
+
+    // Conserver également les éventuels vélos supplémentaires
+    const extraBikes = storedBikes.filter(
+      b => !defaultBikes.some(d => d.id === b.id)
+    )
+
+    const finalBikes = [...mergedBikes, ...extraBikes]
+
+    setBikes(finalBikes)
+
+    // Enregistrer les vélos initiaux manquants sans écraser les autres
+    await Promise.all(
+      finalBikes
+        .filter(b => !storedBikes.some(s => s.id === b.id))
+        .map(b => put('bikes', b))
+    )
+
+    setRoutes(r)
+    setRides(h)
+
+  } catch {
+    setNotice(
+      'Le stockage local n’est pas disponible dans ce navigateur.'
+    )
   }
+}
+
   useEffect(()=>{ refresh() },[])
   const active = routes.find(r=>r.id===activeRoute)
   const minRange = useMemo(()=>Math.min(...bikes.map(b=>b.capacityWh*b.chargePercent/100/Math.max(1,b.consumptionWhKm))),[bikes])
