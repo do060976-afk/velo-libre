@@ -1,0 +1,13 @@
+{
+  "name": "VÉLO LIBRE",
+  "short_name": "Vélo Libre",
+  "description": "Le compagnon de vos balades en VTC électrique.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f3eb",
+  "theme_color": "#183d32",
+  "icons": [
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
