@@ -14,11 +14,20 @@ const defaultBikes: Bike[] = [
 ]
 type Tab = 'home'|'routes'|'ride'|'journal'|'bikes'|'settings'
 
-function FitRoute({ points }: { points: [number,number][] }) {
+
+function FitRoute({ points }: { points: [number, number][] }) {
   const map = useMap()
-  useEffect(() => { if (points.length) map.fitBounds(points as L.LatLngExpression[], { padding:[28,28] }) }, [map, points])
+  useEffect(() => {
+    if (points.length) {
+      const bounds = L.latLngBounds(
+        points.map(([lat, lng]) => L.latLng(lat, lng))
+      )
+      map.fitBounds(bounds, { padding: [28, 28] })
+    }
+  }, [map, points])
   return null
 }
+
 function MapView({ center, routes, active, gps }: { center:[number,number]; routes:SavedRoute[]; active:string; gps:[number,number]|null }) {
   const selected = routes.find(r=>r.id===active)
   const points = selected?.coordinates || []
