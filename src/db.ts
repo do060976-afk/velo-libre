@@ -2,6 +2,7 @@ export type Bike = {
   id: string; name: string; brand: string; model: string;
   capacityWh: number; usualRangeKm: number; consumptionWhKm: number;
   chargePercent: number;
+  chargeLeds?: number;
 }
 export type SavedRoute = {
   id: string; name: string; distanceKm: number; ascentM: number;
