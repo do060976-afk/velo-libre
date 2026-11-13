@@ -8,10 +8,13 @@ import { generateRoutes, type RoutingSettings } from './routing'
 const DEFAULT_CENTER: [number, number] = [43.6907, 4.6097] // Fourques (Gard)
 const uid = () => crypto.randomUUID()
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(n)
+// Données initiales des deux vélos du duo.
+// La consommation reste une hypothèse de départ, à affiner avec les premières sorties.
 const defaultBikes: Bike[] = [
-  { id:'bike-1', name:'Vélo 1', brand:'', model:'', capacityWh:500, usualRangeKm:75, consumptionWhKm:8, chargePercent:100 },
-  { id:'bike-2', name:'Vélo 2', brand:'', model:'', capacityWh:500, usualRangeKm:75, consumptionWhKm:8, chargePercent:100 },
+  { id:'bike-1', name:'Nakamura', brand:'Nakamura', model:'E-Fit 150', capacityWh:375, usualRangeKm:44, consumptionWhKm:8.5, chargePercent:100 },
+  { id:'bike-2', name:'Elops', brand:'Decathlon', model:'Elops 120E', capacityWh:313, usualRangeKm:37, consumptionWhKm:8.5, chargePercent:100 },
 ]
+const SAFE_RESERVE_FACTOR = 0.85 // conserve une marge de sécurité de 15 %
 type Tab = 'home'|'routes'|'ride'|'journal'|'bikes'|'settings'
 
 
@@ -77,9 +80,19 @@ const refresh = async () => {
     ])
 
     // Conserver les deux vélos initiaux et leurs modifications
-    const mergedBikes = defaultBikes.map(defaultBike =>
-      storedBikes.find(b => b.id === defaultBike.id) ?? defaultBike
-    )
+    const mergedBikes = defaultBikes.map(defaultBike => {
+      const stored = storedBikes.find(b => b.id === defaultBike.id)
+      if (!stored) return defaultBike
+
+      // Mise à niveau des deux anciennes fiches génériques uniquement.
+      // La charge saisie est conservée ; une fiche déjà personnalisée reste intacte.
+      const isOldPlaceholder =
+        (stored.name === 'Vélo 1' || stored.name === 'Vélo 2') &&
+        !stored.brand && !stored.model
+      return isOldPlaceholder
+        ? { ...defaultBike, chargePercent: stored.chargePercent ?? 100 }
+        : stored
+    })
 
     // Conserver également les éventuels vélos supplémentaires
     const extraBikes = storedBikes.filter(
@@ -109,8 +122,12 @@ const refresh = async () => {
 
   useEffect(()=>{ refresh() },[])
   const active = routes.find(r=>r.id===activeRoute)
-  const minRange = useMemo(()=>Math.min(...bikes.map(b=>b.capacityWh*b.chargePercent/100/Math.max(1,b.consumptionWhKm))),[bikes])
-  const estimate = (bike:Bike) => bike.capacityWh*bike.chargePercent/100/Math.max(1,bike.consumptionWhKm)
+  const minRange = useMemo(
+    ()=>Math.min(...bikes.map(b=>b.capacityWh*b.chargePercent/100/Math.max(1,b.consumptionWhKm))) * SAFE_RESERVE_FACTOR,
+    [bikes]
+  )
+  const estimate = (bike:Bike) =>
+    bike.capacityWh*bike.chargePercent/100/Math.max(1,bike.consumptionWhKm)
   const nav = (next:Tab) => { setTab(next); setMenuOpen(false) }
 
   async function saveBike(bike:Bike) {
@@ -195,7 +212,7 @@ const refresh = async () => {
         <section className="hero card"><div className="hero-copy"><span className="pill">VOTRE PROCHAINE ÉCHAPPÉE</span><h2>La liberté<br/>à portée de pédale.</h2><p>Imaginez une balade, choisissez votre rythme et profitez du paysage. VÉLO LIBRE s’occupe de vous accompagner.</p><button className="btn light" onClick={()=>nav('routes')}>Préparer une balade <RouteIcon size={17}/></button></div><div className="hero-art"><div className="sun"></div><div className="hill hill-one"></div><div className="hill hill-two"></div><div className="road"></div><BikeIcon className="hero-bike" size={100}/></div></section>
         <section className="card battery-card"><div className="section-heading"><div><span className="eyebrow">NOTRE DUO</span><h3>Énergie disponible</h3></div><BatteryCharging/></div>
           {bikes.slice(0,2).map((b,i)=><div className="battery-row" key={b.id}><div className="battery-label"><span>{b.name}</span><b>{b.chargePercent}%</b></div><div className="progress"><span style={{width:`${b.chargePercent}%`}}/></div><small>Autonomie estimée : {fmt(estimate(b))} km</small></div>)}
-          <div className="range-summary"><span>Autonomie prudente du duo</span><b>{fmt(minRange)} km</b></div><button className="text-btn" onClick={()=>nav('bikes')}>Gérer les vélos →</button>
+          <div className="range-summary"><span>Autonomie prudente du duo (réserve de 15 %)</span><b>{fmt(minRange)} km</b></div><button className="text-btn" onClick={()=>nav('bikes')}>Gérer les vélos →</button>
         </section>
         <section className="card quick-card"><span className="eyebrow">EN UN INSTANT</span><h3>Que souhaitez-vous faire ?</h3><div className="quick-actions"><button onClick={()=>nav('routes')}><MapPinned/><b>Trouver une balade</b><small>Créer une boucle</small></button><button onClick={()=>nav('ride')}><Navigation/><b>Partir rouler</b><small>Suivre le GPS</small></button><button onClick={()=>nav('journal')}><BookOpen/><b>Mes souvenirs</b><small>Voir le carnet</small></button></div></section>
         <section className="card recent-card"><div className="section-heading"><div><span className="eyebrow">VOTRE HISTOIRE</span><h3>Dernières balades</h3></div><button className="text-btn" onClick={()=>nav('journal')}>Tout voir →</button></div>
