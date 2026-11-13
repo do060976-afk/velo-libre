@@ -9,12 +9,17 @@ const DEFAULT_CENTER: [number, number] = [43.6907, 4.6097] // Fourques (Gard)
 const uid = () => crypto.randomUUID()
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(n)
 const defaultBikes: Bike[] = [
-  { id:'bike-1', name:'Nakamura E-Fit 150', brand:'Nakamura', model:'E-Fit 150', capacityWh:375, usualRangeKm:44, consumptionWhKm:8.5, chargePercent:100, chargeLeds:4 },
-  { id:'bike-2', name:'Decathlon Elops 120E', brand:'Decathlon', model:'Elops 120E', capacityWh:313, usualRangeKm:37, consumptionWhKm:8.5, chargePercent:100, chargeLeds:5 },
+  { id:'bike-1', name:'Nakamura E-Fit 150', brand:'Nakamura', model:'E-Fit 150', capacityWh:375, usualRangeKm:44, consumptionWhKm:8.5, chargePercent:100, ledTotal:4, chargeLeds:4 },
+  { id:'bike-2', name:'Decathlon Elops 120E', brand:'Decathlon', model:'Elops 120E', capacityWh:313, usualRangeKm:37, consumptionWhKm:8.5, chargePercent:100, ledTotal:5, chargeLeds:5 },
 
 ]
 const SAFE_RESERVE_FACTOR = 0.85
-const ledCount = (bike: Bike) => bike.chargeLeds ?? (bike.model.toLowerCase().includes('elops') ? 5 : 4)
+const ledCount = (bike: Bike) => bike.ledTotal ?? (bike.model.toLowerCase().includes('elops') ? 5 : 4)
+const inferLitLeds = (bike: Bike, percent: number) => {
+  const total = ledCount(bike)
+  const thresholds = total === 4 ? [0, 25, 50, 75] : [0, 30, 50, 60, 80]
+  return percent <= 0 ? 0 : thresholds.reduce((count, threshold, index) => percent >= threshold ? index : count, 0)
+}
 function conservativeCharge(bike: Bike): number {
   const leds = ledCount(bike)
   const count = Math.max(0, Math.min(leds, bike.chargeLeds ?? leds))
@@ -98,16 +103,21 @@ const refresh = async () => {
       if (!stored) return defaultBike
       const isPlaceholder = (stored.name === 'Vélo 1' || stored.name === 'Vélo 2') && !stored.brand && !stored.model
       if (isPlaceholder) {
-        return { ...defaultBike, chargePercent: stored.chargePercent ?? 100, chargeLeds: defaultBike.chargeLeds }
+        return { ...defaultBike, chargePercent: stored.chargePercent ?? 100, ledTotal: defaultBike.ledTotal, chargeLeds: inferLitLeds(defaultBike, stored.chargePercent ?? 100) }
       }
       const isElops = `${stored.brand} ${stored.model} ${stored.name}`.toLowerCase().includes('elops')
-      return { ...stored, chargeLeds: stored.chargeLeds ?? (isElops ? 5 : 4) }
+      const migrated = { ...stored, ledTotal: stored.ledTotal ?? (isElops ? 5 : 4) }
+      return { ...migrated, chargeLeds: stored.chargeLeds ?? inferLitLeds(migrated, stored.chargePercent ?? 100) }
     })
 
     // Conserver également les éventuels vélos supplémentaires
     const extraBikes = storedBikes.filter(
       b => !defaultBikes.some(d => d.id === b.id)
-    )
+    ).map(b => {
+      const total = b.ledTotal ?? (b.model.toLowerCase().includes('elops') ? 5 : 4)
+      const migrated = { ...b, ledTotal: total }
+      return { ...migrated, chargeLeds: b.chargeLeds ?? inferLitLeds(migrated, b.chargePercent ?? 100) }
+    })
 
     const finalBikes = [...mergedBikes, ...extraBikes]
 
@@ -263,9 +273,9 @@ const refresh = async () => {
         <section className="card map-panel"><div className="map-head"><div><span className="eyebrow">VOTRE POSITION</span><h3>Carte de navigation</h3></div><button className="btn secondary small" onClick={locate}><LocateFixed size={15}/> GPS</button></div><MapView center={gps||center} routes={[]} active="" gps={gps}/><p className="hint">Le suivi GPS en arrière-plan peut être interrompu par le système d’économie d’énergie du téléphone. Cette version enregistre la trace tant que la page reste active.</p></section>
       </div>}
 
-      {tab==='bikes' && <div className="card panel"><div className="section-heading"><div><span className="eyebrow">NOTRE DUO</span><h3>Les deux vélos</h3></div><button className="btn primary" onClick={()=>setEditBike({id:uid(),name:'Nouveau vélo',brand:'',model:'',capacityWh:500,usualRangeKm:70,consumptionWhKm:8,chargePercent:100,chargeLeds:4})}><Plus/> Ajouter</button></div>
+      {tab==='bikes' && <div className="card panel"><div className="section-heading"><div><span className="eyebrow">NOTRE DUO</span><h3>Les deux vélos</h3></div><button className="btn primary" onClick={()=>setEditBike({id:uid(),name:'Nouveau vélo',brand:'',model:'',capacityWh:500,usualRangeKm:70,consumptionWhKm:8,chargePercent:100,ledTotal:4,chargeLeds:4})}><Plus/> Ajouter</button></div>
         <div className="bike-grid">{bikes.map(b=><div className="bike-card" key={b.id}><div className="bike-card-top"><span className="round-icon"><BikeIcon/></span><button className="text-btn" onClick={()=>setEditBike(b)}>Modifier</button></div><h3>{b.name}</h3><p className="muted">{[b.brand,b.model].filter(Boolean).join(' ')||'VTC électrique'}</p><div className="battery-label"><span>Charge actuelle</span><b>{b.chargeLeds ?? ledCount(b)} / {ledCount(b)} LED</b></div><div className="led-display large">{Array.from({length:ledCount(b)},(_,i)=><span key={i} className={i<(b.chargeLeds ?? ledCount(b))?'led on':'led'}/>)}</div><div className="led-picker"><span>Nombre de LED allumées</span><div className="led-options">{Array.from({length:ledCount(b)+1},(_,i)=><button type="button" key={i} className={(b.chargeLeds ?? ledCount(b))===i?'led-choice selected':'led-choice'} onClick={()=>setBikeLeds(b,i)}>{i}</button>)}</div><small>{chargeDescription(b,b.chargeLeds ?? ledCount(b))}</small></div><div className="bike-numbers"><div><b>{b.capacityWh} Wh</b><small>Capacité</small></div><div><b>{fmt(estimate(b))} km</b><small>Autonomie estimée</small></div></div></div>)}</div>
-        {editBike&&<div className="modal-backdrop"><div className="modal"><div className="section-heading"><h3>Fiche vélo</h3><button className="icon-btn" onClick={()=>setEditBike(null)}><X/></button></div>{(['name','brand','model'] as const).map(k=><div key={k}><label>{k==='name'?'Nom':k==='brand'?'Marque':'Modèle'}</label><input value={editBike[k]} onChange={e=>setEditBike({...editBike,[k]:e.target.value})}/></div>)}<div className="field-row"><div><label>Capacité (Wh)</label><input type="number" value={editBike.capacityWh} onChange={e=>setEditBike({...editBike,capacityWh:Number(e.target.value)})}/></div><div><label>Consommation (Wh/km)</label><input type="number" value={editBike.consumptionWhKm} onChange={e=>setEditBike({...editBike,consumptionWhKm:Number(e.target.value)})}/></div></div><div className="field-row"><div><label>Autonomie habituelle (km)</label><input type="number" value={editBike.usualRangeKm} onChange={e=>setEditBike({...editBike,usualRangeKm:Number(e.target.value)})}/></div><div><label>Nombre de LED batterie</label><select value={ledCount(editBike)} onChange={e=>setEditBike({...editBike,chargeLeds:Number(e.target.value),chargePercent:100})}><option value={4}>4 LED</option><option value={5}>5 LED</option></select></div></div><button className="btn primary full" onClick={()=>saveBike(editBike)}><Save/> Enregistrer</button></div></div>}
+        {editBike&&<div className="modal-backdrop"><div className="modal"><div className="section-heading"><h3>Fiche vélo</h3><button className="icon-btn" onClick={()=>setEditBike(null)}><X/></button></div>{(['name','brand','model'] as const).map(k=><div key={k}><label>{k==='name'?'Nom':k==='brand'?'Marque':'Modèle'}</label><input value={editBike[k]} onChange={e=>setEditBike({...editBike,[k]:e.target.value})}/></div>)}<div className="field-row"><div><label>Capacité (Wh)</label><input type="number" value={editBike.capacityWh} onChange={e=>setEditBike({...editBike,capacityWh:Number(e.target.value)})}/></div><div><label>Consommation (Wh/km)</label><input type="number" value={editBike.consumptionWhKm} onChange={e=>setEditBike({...editBike,consumptionWhKm:Number(e.target.value)})}/></div></div><div className="field-row"><div><label>Autonomie habituelle (km)</label><input type="number" value={editBike.usualRangeKm} onChange={e=>setEditBike({...editBike,usualRangeKm:Number(e.target.value)})}/></div><div><label>Nombre de LED batterie</label><select value={ledCount(editBike)} onChange={e=>{const total=Number(e.target.value);setEditBike({...editBike,ledTotal:total,chargeLeds:Math.min(editBike.chargeLeds ?? ledCount(editBike),total)})}}><option value={4}>4 LED</option><option value={5}>5 LED</option></select></div></div><button className="btn primary full" onClick={()=>saveBike(editBike)}><Save/> Enregistrer</button></div></div>}
       </div>}
 
       {tab==='journal' && <section className="card panel"><div className="section-heading"><div><span className="eyebrow">VOS SOUVENIRS</span><h3>Le carnet de balades</h3></div><BookOpen/></div>
