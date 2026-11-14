@@ -250,6 +250,12 @@ const refresh = async () => {
           <div className="segmented"><button className={mode==='automatic'?'chosen':''} onClick={()=>setMode('automatic')}>Automatique</button><button className={mode==='custom'?'chosen':''} onClick={()=>setMode('custom')}>Personnalisé</button></div>
           <label>Point de départ</label><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Commune ou lieu"/>
           <div className="field-row"><div><label>Distance souhaitée</label><div className="range-input"><input type="range" min="10" max="80" step="5" value={distance} onChange={e=>setDistance(Number(e.target.value))}/><b>{distance} km</b></div></div><div><label>Difficulté</label><select value={difficulty} onChange={e=>setDifficulty(e.target.value)}><option value="easy">Facile</option><option value="medium">Modérée</option><option value="hard">Soutenue</option></select></div></div>
+          <div className={distance > minRange ? "callout battery-warning" : "callout battery-ok"}>
+            {distance > minRange ? <AlertTriangle/> : <BatteryCharging/>}
+            <span><b>{distance > minRange ? "Attention : distance supérieure à l’autonomie prudente" : "Distance compatible avec l’autonomie estimée"}</b><br/>
+            Autonomie prudente du duo : {fmt(minRange)} km. Distance demandée : {distance} km.
+            {distance > minRange ? " Réduisez la distance ou prévoyez une recharge." : " La réserve de sécurité de 15 % est prise en compte."}</span>
+          </div>
           {mode==='custom' && <><label>Ambiance souhaitée</label><select value={terrain} onChange={e=>setTerrain(e.target.value)}><option value="mixed">Un peu de tout</option><option value="nature">Nature et paysages</option><option value="heritage">Villages et patrimoine</option><option value="greenways">Voies vertes et pistes cyclables</option></select><p className="hint">Les préférences seront prises en compte lorsque le moteur de routage configuré les prend en charge.</p></>}
           <button className="btn primary full" disabled={loading} onClick={()=>createRoutes(false)}>{loading?<RefreshCw className="spin"/>:<RouteIcon/>}{loading?'Calcul en cours…':'Générer mes balades'}</button>
           <button className="btn secondary full" onClick={()=>createRoutes(true)}>Essayer avec des circuits de démonstration</button>
@@ -261,6 +267,7 @@ const refresh = async () => {
           <MapView center={center} routes={routes} active={activeRoute} gps={gps}/>
           <div className="map-caption"><span><i className="legend-dot"></i> Départ / position</span><span><i className="legend-line"></i> Itinéraire sélectionné</span></div>
           {routes.map(r=><div className={r.id===activeRoute?'route-result selected':'route-result'} key={r.id} onClick={()=>setActiveRoute(r.id)}><div className="route-result-main"><b>{r.name}</b><small>{r.source==='valhalla'?'Calculé par Valhalla':'Démonstration / import'}</small></div><strong>{fmt(r.distanceKm)} km</strong><button className="icon-btn" title="Exporter GPX" onClick={e=>{e.stopPropagation();exportGpx(r)}}><Download size={16}/></button><button className="icon-btn" title="Supprimer" onClick={e=>{e.stopPropagation();deleteRoute(r.id)}}><Trash2 size={16}/></button></div>)}
+          {active && <div className={active.distanceKm > minRange ? "callout battery-warning" : "callout battery-ok"}>{active.distanceKm > minRange ? <AlertTriangle/> : <BatteryCharging/>}<span><b>{active.distanceKm > minRange ? "Attention : autonomie prudente dépassée" : "Autonomie prudente compatible"}</b><br/>Parcours : {fmt(active.distanceKm)} km. Autonomie prudente du duo : {fmt(minRange)} km.{active.distanceKm > minRange ? " Une recharge ou un parcours plus court est conseillé." : ""}</span></div>}
           {active && <div className="route-metrics"><div><b>{fmt(active.distanceKm)} km</b><small>Distance</small></div><div><b>{active.ascentM} m</b><small>Dénivelé connu</small></div><div><b>{active.durationMin} min</b><small>Durée indicative</small></div></div>}
         </section>
       </div>}
