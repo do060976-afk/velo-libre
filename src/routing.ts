@@ -58,7 +58,7 @@ async function valhallaLeg(points: LatLng[], settings: RoutingSettings, bikeType
     directions_options: { units: 'kilometers', language: 'fr-FR' }
   };
   const url = `${settings.endpoint.replace(/\/$/, '')}/route${settings.apiKey ? `?api_key=${encodeURIComponent(settings.apiKey)}` : ''}`;
-  const res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const res = await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json', 'X-Client-Id':'velo-libre-do060976-afk.github.io'}, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`Valhalla : réponse HTTP ${res.status}`);
   const data = await res.json() as ValhallaResponse;
   if (!data.trip?.legs?.length) throw new Error(data.error || 'Aucun itinéraire retourné par Valhalla.');

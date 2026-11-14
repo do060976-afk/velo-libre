@@ -16,7 +16,7 @@ Application web mobile (PWA) pour préparer et suivre des balades en VTC électr
 - Sauvegarde et restauration JSON.
 - Stockage local IndexedDB.
 - Manifeste PWA et cache de base du shell applicatif.
-- Pipeline GitLab Pages.
+- Pipeline GitHub Actions pour GitHub Pages.
 
 ## Démarrer en local
 
@@ -36,27 +36,24 @@ npm run build
 npm run preview
 ```
 
-## Déploiement GitLab Pages
+## Déploiement GitHub Pages
 
-1. Créer un projet GitLab, par exemple `velo-libre`.
-2. Déposer l'ensemble des fichiers à la racine du dépôt.
-3. Pousser sur la branche par défaut (`main` ou `master`).
-4. Le pipeline `.gitlab-ci.yml` installe les dépendances, compile Vite et publie `dist/` dans `public/`.
-5. Consulter **Deploy > Pages** dans GitLab pour récupérer l'URL publiée.
+1. Déposer l'ensemble des fichiers à la racine du dépôt GitHub.
+2. Pousser les changements sur la branche `main`.
+3. Le workflow `.github/workflows/deploy.yml` installe les dépendances, compile Vite et publie le dossier `dist/` sur GitHub Pages.
+4. Vérifier que le dernier workflow est terminé avec succès dans l'onglet **Actions**.
 
-La configuration Vite utilise `base: './'` pour fonctionner à la racine ou sous un chemin de projet GitLab Pages.
+La configuration Vite utilise une base relative pour fonctionner sur GitHub Pages.
 
 ## Configurer Valhalla
 
-Le générateur réel nécessite un serveur Valhalla accessible depuis le navigateur et autorisant les requêtes CORS depuis le domaine GitLab Pages.
+Le générateur réel est préconfiguré avec le serveur public de démonstration FOSSGIS :
 
-Dans **Réglages > Connexion Valhalla**, saisir l'URL de base du serveur, par exemple :
+`https://valhalla1.openstreetmap.de`
 
-`https://valhalla.example.org`
+Dans **Réglages > Connexion Valhalla**, cliquer sur **Enregistrer et tester la connexion**. L'adresse et l'éventuelle clé API sont conservées localement dans IndexedDB. L'application vérifie `/status`, puis envoie les demandes d'itinéraire à `/route` avec le profil vélo hybride et l'identifiant `X-Client-Id: velo-libre-do060976-afk.github.io`.
 
-L'application envoie des requêtes POST à `/route`. Une clé API peut être saisie si le service en demande une.
-
-**Aucun serveur Valhalla n'est fourni ni hébergé par ce dépôt.** Il faut disposer de sa propre instance ou d'un fournisseur dont les conditions d'utilisation autorisent cet usage. Ne jamais placer un secret privé dans le code public du dépôt.
+Ce serveur est public et fourni sans garantie de disponibilité. Il applique une politique d'usage raisonnable et peut limiter les requêtes. Il convient à des essais et à un usage personnel modéré, pas à un service à fort trafic. Les mainteneurs Valhalla demandent aux applications publiées à destination d'utilisateurs de les prévenir et d'identifier leurs requêtes. Voir la [documentation Valhalla](https://valhalla.github.io/valhalla/start/introduction/). Une clé API n'est pas nécessaire pour ce serveur public.
 
 Sans serveur configuré, le mode démonstration génère des formes de boucles indicatives. Ces tracés ne suivent pas les routes réelles et ne doivent pas être utilisés pour naviguer.
 
@@ -99,8 +96,7 @@ Les photos sont intégrées aux enregistrements locaux. Éviter les photos très
 
 ## Évolutions recommandées
 
-1. Persister les paramètres Valhalla et ajouter un test de connexion.
-2. Ajouter un service d'altitude pour calculer le dénivelé.
+1. Ajouter un service d'altitude pour calculer le dénivelé.
 3. Améliorer la génération de boucles et les contraintes de distance.
 4. Ajouter le téléchargement de cartes hors ligne avec un fournisseur compatible.
 5. Améliorer le guidage vocal et la gestion du GPS en arrière-plan (dans les limites des plateformes).

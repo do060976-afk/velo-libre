@@ -70,8 +70,9 @@ function App() {
   const [mode,setMode] = useState<'automatic'|'custom'>('automatic')
   const [difficulty,setDifficulty] = useState('easy')
   const [terrain,setTerrain] = useState('mixed')
-  const [endpoint,setEndpoint] = useState('')
+  const [endpoint,setEndpoint] = useState('https://valhalla1.openstreetmap.de')
   const [apiKey,setApiKey] = useState('')
+  const [routingStatus,setRoutingStatus] = useState<'checking'|'ready'|'error'|'unknown'>('unknown')
   const [activeRoute,setActiveRoute] = useState('')
   const [loading,setLoading] = useState(false)
   const [notice,setNotice] = useState('Bienvenue dans VÉLO LIBRE.')
@@ -91,11 +92,14 @@ function App() {
 
 const refresh = async () => {
   try {
-    const [storedBikes, r, h] = await Promise.all([
+    const [storedBikes, r, h, savedSettings] = await Promise.all([
       all<Bike>('bikes'),
       all<SavedRoute>('routes'),
-      all<Ride>('rides')
+      all<Ride>('rides'),
+      all<{id:string; endpoint?:string; apiKey?:string}>('settings')
     ])
+    const routing = savedSettings.find(item => item.id === 'routing')
+    if (routing) { setEndpoint(routing.endpoint || 'https://valhalla1.openstreetmap.de'); setApiKey(routing.apiKey || '') }
 
     // Mettre à niveau les anciennes fiches génériques sans perdre leur niveau de charge.
     const mergedBikes = defaultBikes.map(defaultBike => {
@@ -158,6 +162,32 @@ const refresh = async () => {
     const next = bikes.some(b=>b.id===bike.id) ? bikes.map(b=>b.id===bike.id?bike:b) : [...bikes,bike]
     setBikes(next); await put('bikes',bike); setEditBike(null); setNotice('Fiche vélo enregistrée.')
   }
+  async function saveRoutingSettings() {
+    const cleanEndpoint = endpoint.trim().replace(/\/$/, '')
+    if (!/^https:\/\//i.test(cleanEndpoint)) {
+      setRoutingStatus('error')
+      setNotice('Adresse Valhalla invalide : utilisez une adresse HTTPS.')
+      return
+    }
+    setEndpoint(cleanEndpoint)
+    try {
+      await put('settings', { id: 'routing', endpoint: cleanEndpoint, apiKey: apiKey.trim() })
+      setRoutingStatus('checking')
+      const response = await fetch(`${cleanEndpoint}/status`, {
+        method: 'GET',
+        headers: { 'X-Client-Id': 'velo-libre-do060976-afk.github.io' },
+        signal: AbortSignal.timeout(12000)
+      })
+      if (!response.ok) throw new Error(`Réponse HTTP ${response.status}`)
+      setRoutingStatus('ready')
+      setNotice('Connexion Valhalla vérifiée. Les itinéraires réels sont prêts à être calculés.')
+    } catch (error) {
+      setRoutingStatus('error')
+      const detail = error instanceof Error ? error.message : 'Erreur inconnue'
+      setNotice(`Réglage enregistré, mais serveur Valhalla injoignable : ${detail}. Vérifiez la connexion ou réessayez.`)
+    }
+  }
+
   async function createRoutes(forceDemo=false) {
     setLoading(true); setNotice(forceDemo?'Création de circuits de démonstration…':'Recherche de circuits…')
     try {
@@ -250,12 +280,6 @@ const refresh = async () => {
           <div className="segmented"><button className={mode==='automatic'?'chosen':''} onClick={()=>setMode('automatic')}>Automatique</button><button className={mode==='custom'?'chosen':''} onClick={()=>setMode('custom')}>Personnalisé</button></div>
           <label>Point de départ</label><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Commune ou lieu"/>
           <div className="field-row"><div><label>Distance souhaitée</label><div className="range-input"><input type="range" min="10" max="80" step="5" value={distance} onChange={e=>setDistance(Number(e.target.value))}/><b>{distance} km</b></div></div><div><label>Difficulté</label><select value={difficulty} onChange={e=>setDifficulty(e.target.value)}><option value="easy">Facile</option><option value="medium">Modérée</option><option value="hard">Soutenue</option></select></div></div>
-          <div className={distance > minRange ? "callout battery-warning" : "callout battery-ok"}>
-            {distance > minRange ? <AlertTriangle/> : <BatteryCharging/>}
-            <span><b>{distance > minRange ? "Attention : distance supérieure à l’autonomie prudente" : "Distance compatible avec l’autonomie estimée"}</b><br/>
-            Autonomie prudente du duo : {fmt(minRange)} km. Distance demandée : {distance} km.
-            {distance > minRange ? " Réduisez la distance ou prévoyez une recharge." : " La réserve de sécurité de 15 % est prise en compte."}</span>
-          </div>
           {mode==='custom' && <><label>Ambiance souhaitée</label><select value={terrain} onChange={e=>setTerrain(e.target.value)}><option value="mixed">Un peu de tout</option><option value="nature">Nature et paysages</option><option value="heritage">Villages et patrimoine</option><option value="greenways">Voies vertes et pistes cyclables</option></select><p className="hint">Les préférences seront prises en compte lorsque le moteur de routage configuré les prend en charge.</p></>}
           <button className="btn primary full" disabled={loading} onClick={()=>createRoutes(false)}>{loading?<RefreshCw className="spin"/>:<RouteIcon/>}{loading?'Calcul en cours…':'Générer mes balades'}</button>
           <button className="btn secondary full" onClick={()=>createRoutes(true)}>Essayer avec des circuits de démonstration</button>
@@ -267,7 +291,6 @@ const refresh = async () => {
           <MapView center={center} routes={routes} active={activeRoute} gps={gps}/>
           <div className="map-caption"><span><i className="legend-dot"></i> Départ / position</span><span><i className="legend-line"></i> Itinéraire sélectionné</span></div>
           {routes.map(r=><div className={r.id===activeRoute?'route-result selected':'route-result'} key={r.id} onClick={()=>setActiveRoute(r.id)}><div className="route-result-main"><b>{r.name}</b><small>{r.source==='valhalla'?'Calculé par Valhalla':'Démonstration / import'}</small></div><strong>{fmt(r.distanceKm)} km</strong><button className="icon-btn" title="Exporter GPX" onClick={e=>{e.stopPropagation();exportGpx(r)}}><Download size={16}/></button><button className="icon-btn" title="Supprimer" onClick={e=>{e.stopPropagation();deleteRoute(r.id)}}><Trash2 size={16}/></button></div>)}
-          {active && <div className={active.distanceKm > minRange ? "callout battery-warning" : "callout battery-ok"}>{active.distanceKm > minRange ? <AlertTriangle/> : <BatteryCharging/>}<span><b>{active.distanceKm > minRange ? "Attention : autonomie prudente dépassée" : "Autonomie prudente compatible"}</b><br/>Parcours : {fmt(active.distanceKm)} km. Autonomie prudente du duo : {fmt(minRange)} km.{active.distanceKm > minRange ? " Une recharge ou un parcours plus court est conseillé." : ""}</span></div>}
           {active && <div className="route-metrics"><div><b>{fmt(active.distanceKm)} km</b><small>Distance</small></div><div><b>{active.ascentM} m</b><small>Dénivelé connu</small></div><div><b>{active.durationMin} min</b><small>Durée indicative</small></div></div>}
         </section>
       </div>}
@@ -289,7 +312,7 @@ const refresh = async () => {
         {rides.length===0?<div className="empty-state"><BookOpen size={36}/><h3>Votre carnet est encore vierge</h3><p>Enregistrez votre première sortie pour la retrouver ici.</p></div>:<div className="journal-grid">{rides.map(r=><article className="journal-card" key={r.id}>{r.photo?<img src={r.photo}/>:<div className="journal-placeholder"><BikeIcon size={36}/></div>}<div className="journal-body"><small>{new Date(r.date).toLocaleDateString('fr-FR')}</small><h3>{r.name}</h3><div className="journal-stats"><b>{fmt(r.distanceKm)} km</b><span>{r.durationMin} min</span></div>{r.notes&&<p>{r.notes}</p>}<button className="text-btn danger-text" onClick={()=>deleteRide(r.id)}>Supprimer cette sortie</button></div></article>)}</div>}
       </section>}
 
-      {tab==='settings' && <div className="settings-grid"><section className="card panel"><span className="eyebrow">MOTEUR D’ITINÉRAIRES</span><h3>Connexion Valhalla</h3><p className="muted">Indiquez l’adresse d’un serveur Valhalla compatible. Aucun serveur n’est fourni avec cette application.</p><label>URL du serveur (ex. https://mon-serveur/route)</label><input value={endpoint} onChange={e=>setEndpoint(e.target.value)} placeholder="https://…"/><label>Clé API (facultative)</label><input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Clé API si nécessaire"/><button className="btn primary full" onClick={()=>setNotice('Paramètres de routage actifs pour cette session. Pensez à les conserver dans votre gestionnaire de mots de passe.')}>Appliquer pour cette session</button><div className="callout"><AlertTriangle/> Sans serveur configuré, seuls les circuits de démonstration sont disponibles. Ils ne sont pas navigables.</div></section>
+      {tab==='settings' && <div className="settings-grid"><section className="card panel"><span className="eyebrow">MOTEUR D’ITINÉRAIRES</span><h3>Connexion Valhalla</h3><p className="muted">Serveur public de démonstration FOSSGIS, sans clé API. Usage raisonnable uniquement ; sa disponibilité n’est pas garantie.</p><label>Adresse du serveur Valhalla</label><input value={endpoint} onChange={e=>{setEndpoint(e.target.value);setRoutingStatus('unknown')}} placeholder="https://valhalla1.openstreetmap.de"/><label>Clé API (facultative)</label><input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Aucune clé nécessaire pour le serveur public"/><button className="btn primary full" onClick={saveRoutingSettings} disabled={routingStatus==='checking'}>{routingStatus==='checking'?'Vérification…':'Enregistrer et tester la connexion'}</button><div className={routingStatus==='ready'?'callout routing-ready':routingStatus==='error'?'callout routing-error':'callout'}>{routingStatus==='ready'?<CheckCircle2/>:<AlertTriangle/>}<span>{routingStatus==='ready'?'Serveur accessible. VÉLO LIBRE utilisera le calcul d’itinéraires cyclables réel.':routingStatus==='error'?'Connexion non vérifiée. Les circuits de démonstration restent disponibles.':'L’adresse est préremplie. Enregistrez-la et testez la connexion avant de générer vos balades.'}</span></div><p className="hint">Le serveur public applique une politique d’usage raisonnable et peut limiter les requêtes. Pour une application publiée à tous, les mainteneurs demandent de les prévenir et d’identifier les requêtes via X-Client-Id.</p></section>
         <section className="card panel"><span className="eyebrow">VOS DONNÉES</span><h3>Sauvegarde et restauration</h3><p className="muted">Les vélos, parcours et sorties sont enregistrés sur cet appareil dans IndexedDB.</p><button className="btn primary full" onClick={exportBackup}><Download/> Exporter toutes mes données (JSON)</button><button className="btn secondary full" onClick={()=>fileRef.current?.click()}><Upload/> Importer un fichier GPX</button><label className="btn secondary full file-label"><Upload/> Restaurer une sauvegarde JSON<input type="file" accept="application/json,.json" onChange={e=>e.target.files?.[0]&&importBackup(e.target.files[0])}/></label><div className="callout"><CheckCircle2/> Pensez à effectuer régulièrement une sauvegarde, notamment avant de changer de téléphone ou de navigateur.</div></section>
         <section className="card panel"><span className="eyebrow">À PROPOS</span><h3>VÉLO LIBRE 1.0</h3><p>Deux vélos. Une envie d’ailleurs. Des balades sans souci.</p><p className="muted">Application indépendante. Les cartes en ligne sont fournies par OpenStreetMap et nécessitent une connexion. Le téléchargement de zones cartographiques hors ligne n’est pas inclus dans cette version.</p></section>
       </div>}

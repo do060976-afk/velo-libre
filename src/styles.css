@@ -17,7 +17,4 @@
 .led-choice.selected{background:#246b3b;color:#fff;border-color:#246b3b}
 .led-picker small{display:block;color:#64736a;line-height:1.4}
 
-/* Indicateurs d'autonomie */
-.battery-warning{background:#fff3e8;color:#804515;border-left:4px solid #c47a22}
-.battery-ok{background:#edf7ef;color:#285c3c;border-left:4px solid #39845f}
-.battery-warning,.battery-ok{align-items:flex-start}
+.routing-ready{background:#eef8f1;color:#24583d;border-left:4px solid #39845f}.routing-error{background:#fff2ed;color:#8a3d2c;border-left:4px solid #bd5a40}
